@@ -1,5 +1,8 @@
 {
-  "author": "Ben Pirt <ben@pirt.co.uk>",
+  "author": {
+    "name": "Ben Pirt",
+    "email": "ben@pirt.co.uk"
+  },
   "name": "backbone-postgresql",
   "description": "A storage adapter for PostgreSQL when running Backbone.js on the server",
   "version": "0.0.0",
@@ -14,16 +17,24 @@
     "test": "./node_modules/mocha/bin/mocha -R spec test/*_test.js"
   },
   "dependencies": {
-    "backbone":"0.9.2",
-    "pg":"0.6.13",
-    "underscore":"1.3.3"
+    "backbone": "0.9.2",
+    "pg": "0.6.13",
+    "underscore": "1.3.3"
   },
   "devDependencies": {
-    "mocha":"0.14.1",
-    "should":"0.6.0"
+    "mocha": "0.14.1",
+    "should": "0.6.0"
   },
   "optionalDependencies": {},
   "engines": {
     "node": "*"
-  }
+  },
+  "readme": "backbone-postgresql\n===================\n\n[![Build Status](https://secure.travis-ci.org/bjpirt/backbone-postgresql.png)](http://travis-ci.org/bjpirt/backbone-postgresql)\n\nThis is a sync library for server-side Backbone.js running on node.js that enables it to store data in PostgreSQL. It uses a hybrid approach to the schema whereby you can mix up old-school columns with all of their associated relational integrity and an hstore column that allows you to store arbitrary attributes with no schema changes.\n\nSee this article for some more details about hstore, and also the PostgreSQL docs here. To set up your database with the hstore extension you need to log into postgres as an admin and use the database you want to add it to, then run \"CREATE EXTENSION hstore\". It should then be ready for you to use.\n\nThe library uses all of the standard Backbone methods for syncing objects and works with both models and collections. Here's an example, it assumes you've created a database and set it up with the hstore extension and then set up a database with the following schema:\n\n```sql\nCREATE TABLE badgers (\n  id SERIAL,\n  name VARCHAR(128),\n  attributes hstore\n);\n```\n\nThis won't really run as one script because otherwise it would all have to be nested to make sure things had executed before moving on to the next example, but this way is a lot easier to read.\n\n```javascript\n// Require the library as Backbone so that it can extend its prototype\nBackbone = require('backbone-postgresql');\n\n// Tell the Postgres connector how to connect to the database\nBackbone.pg_connector.config = {db: 'pg://username:password@localhost/backbone-pg-demo'};\n\n// Define our models and collections. We're using the urlRoot parameter to define the table name\nvar Badger = Backbone.Model.extend({\n  urlRoot: '/badgers'\n});\n\nvar BadgerCollection = Backbone.Collection.extend({\n  urlRoot: '/badgers',\n  model: Badger\n});\n\n// Let's create a new badger\nvar badger = new Badger({name: 'Bodger', age: 2});\n// and save it - with this schema the age attribute will be stored in hstore, whilst the name attribute will go in a proper column\nbadger.save();\n// Here we use the event emitter approach\nbadger.on('sync', function(model){\n  console.log('Badger saved: ' + model.name);\n});\nbadger.on('error', function(model, err){\n  console.log('Error saving badger');\n});\n\n//then we could change some attributes - obviously we should really put this in the success callback, but for keeping the examples simple I haven't\nmodel.set('age', 3);\n// then let's save it again but this time we can use callbacks as an argument\n// the first argument is null because you can pass in new attributes to save. Always catches me out.\nmodel.save(null, {\n  success: function(model){\n    console.log('Badger updated: ' + model.name);\n  },\n  error: function(model, err){\n    console.log('Error updating badger');\n  }\n});\n\n// Let's say that the id of a badger is 345 - here is how we retrieve it from the database:\nvar another_badger = new Badger({id: 345});\nanother_badger.fetch({\n  success: function(model){\n    console.log(\"Successfully retrieved badger: \" + model.attributes.name + \" (Age: \" + model.attributes.age + \")\");\n  },\n  error: function(model, err){\n    console.log(err instanceof Error);\n    console.log(err.message); // \"Not found\"\n    console.log('Error retrieving badger');\n  }\n});\n\n// If it can't be found, the error callback will be fired and the \"err\" parameter will return a \"Not found\" error\n\n// If you want to put some constraints on what you're fetching (e.g. if you want to fetch a resource, but wanted to make sure it was owned by the correct person)\n// you can add a filter parameter like so:\n\nanother_badger.fetch({\n  filter: {owner_id: 123},\n  success: ...\n  error: ...\n});\n\n// The filter parameter can be an object, in which case each of the key:value pairs are turned into where constraints ANDed together, e.g.\n// {owner_id: 123, name: 'bob'}\n// will get turned into a snippet of SQL like:\n// WHERE owner_id = 123 AND name = 'bob'\n\n// If you want to apply more complex conditions, you can create a series of conditions which will be ANDed together as well, e.g.\n// ['owner_id = 123', \"name = 'bob'\"]\n// is equivalent to the same thing:\n// WHERE owner_id = 123 AND name = 'bob'\n\n// And if we wanted to delete it we could just do:\nanother_badger.destroy({\n  success: function(model){\n    console.log(\"You just destroyed an endangered animal\");\n  },\n  error: function(model, err){\n    console.log(\"No badger was harmed\");\n  }\n});\n\n// Collections\n\n// Let's make a collection of badgers\nvar badgers = new BadgerCollection();\n\nbadgers.fetch({\n  success: function(collection){\n    console.log(\"Successfully fetched badgers\");\n  },\n  error: function(collection, err){\n    console.log(\"Error fetching badgers\");\n  }\n});\n\n// You can also apply a filter to this fetch as in the fetch example for Models, e.g.\n\nbadgers.fetch({\n  filter: {name: 'bob'},\n  success: ...\n  error: ...\n});\n\n// will return all badgers named bob\n```\n\n# Contributions\n\nThe best contribution is a pull request! Let me know if there are things you'd like to see it do. If you do submit a pull request, make sure you add tests. It's pretty well covered so if there are any bugs let me know and I'll get them tested and fixed.\n\n# Credits\n\nObviously without Backbone this wouldn't even exist so thanks to Jeremy Ashkenas for creating that to begin with. I used the backbone-mongodb module as inspiration for the structure of the code and shamefully stole the hstore serialisation method from backbone-hstore. Thanks all.\n\n\n\n\n\n\n\n\n\n\n\n\n",
+  "readmeFilename": "README.md",
+  "_id": "backbone-postgresql@0.0.0",
+  "dist": {
+    "shasum": "c1f37a3b0cda981b35a542460d432f60e95af14e"
+  },
+  "_resolved": "git+ssh://git@192.168.3.1/git/libraries/backbone-postgresql.git#72d79c8d0c45b3c5fea7409baa3e4b372b157ffb",
+  "_from": "backbone-postgresql@git+ssh://git@192.168.3.1/git/libraries/backbone-postgresql.git#master"
 }
