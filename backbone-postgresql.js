@@ -10,7 +10,7 @@ _ = require('underscore');
 
 		connect: function(cb){
 			if (this.config.db === undefined) throw new Error("You must define the config");
-			this.pg = this.pg || require('pg').native;
+			this.pg = this.pg || require('pg');
 			this.pg.connect(this.config.db, cb);
 		},
 
@@ -18,6 +18,7 @@ _ = require('underscore');
 			var self = this;
 			model.load_attributes(function(){
 				con.connect(function(err, client){
+					if (err) Error(err);
 					var attr_query = (model.has_attributes() ? ', %# attributes as attributes' : '');
 					options.relation_conds = model.relation_conds();
 					var filter = model.filter_query(options, ' AND ');
