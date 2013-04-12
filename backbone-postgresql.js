@@ -22,7 +22,7 @@ _ = require('underscore');
 					var attr_query = (model.has_attributes() ? ', %# attributes as attributes' : '');
 					options.relation_conds = model.relation_conds();
 					var filter = model.filter_query(options, ' AND ');
-					client.query('SELECT *' + attr_query + ' FROM ' + model.table_name() + ' WHERE id = $1' + filter, [model.id], function(err, result) {
+					client.query('SELECT *' + attr_query + ' FROM ' + model.table_name() + ' WHERE '+ model.idAttribute + ' = $1' + filter, [model.id], function(err, result) {
 						if(err) return options.error(model, err);
 						if(result.rows.length == 0) return options.error(model, new Error("Not found"));
 						options.success(model.merge_incoming_attributes(result.rows[0]));
@@ -80,7 +80,7 @@ _ = require('underscore');
 				var dollar_counter = 1;
 				for(var key in model.attributes){
 					if(existing_keys.indexOf(key) != -1){
-						if(key != 'id'){
+						if(key != model.idAttribute){
 							keys.push(key + ' = $' + dollar_counter ++);
 							values.push(model.attributes[key]);
 						}
@@ -96,7 +96,7 @@ _ = require('underscore');
 				}
 				values.push(model.id);
 				con.connect(function(err, client){
-					client.query('UPDATE ' + model.table_name() + ' SET ' + keys.join(', ') + ' WHERE id = $' + dollar_counter + ' RETURNING *' + attr_query, values, function(err, result) {
+					client.query('UPDATE ' + model.table_name() + ' SET ' + keys.join(', ') + ' WHERE ' + model.idAttribute + ' = $' + dollar_counter + ' RETURNING *' + attr_query, values, function(err, result) {
 						if(err) return options.error(model, err);
 						if(result.rows.length == 0) return options.error(model, new Error("Not found"));
 						options.success(model.merge_incoming_attributes(result.rows[0]));
@@ -109,7 +109,7 @@ _ = require('underscore');
 			con.connect(function(err, client){
 				options.relation_conds = model.relation_conds()
 				var where_clause = model.filter_query(options, ' AND ')
-				client.query('DELETE FROM ' + model.table_name() + ' WHERE id = $1' + where_clause + ' RETURNING id', [model.id], function(err, result) {
+				client.query('DELETE FROM ' + model.table_name() + ' WHERE ' + model.idAttribute + ' = $1' + where_clause + ' RETURNING ' + model.idAttribute, [model.id], function(err, result) {
 					if(err) return options.error(model, err);
 					if(result.rows.length == 0) return options.error(model, new Error("Not found"));
 					options.success();
@@ -123,7 +123,7 @@ _ = require('underscore');
 				model.load_attributes(function(){
 					options.relation_conds = collection.relation_conds();
 					var where_clause = model.filter_query(options, ' WHERE ');
-					client.query('SELECT * FROM ' + collection.table_name() + where_clause + ' ORDER BY id', [], function(err, result) {
+					client.query('SELECT * FROM ' + collection.table_name() + where_clause + ' ORDER BY ' + model.idAttribute, [], function(err, result) {
 						if(err) return options.error(collection, err);
 						options.success(result.rows);
 						collection.trigger('fetched');
