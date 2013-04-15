@@ -46,13 +46,13 @@ _ = require('underscore');
 						keys.push(key);
 						values.push(model.attributes[key]);
 						dollars.push('$' + dollar_counter++);
-					}else if (config.hstore){
+					}else if (con.config.hstore){
 						if(model.has_attributes()){
 							hstore_attrs[key] = model.attributes[key];
 						}
 					}else throw new Error("Column '" + key + "' not found in table '" + model.table_name() + "'")
 				}
-				if(config.hstore && _.keys(hstore_attrs).length > 0){
+				if(con.config.hstore && _.keys(hstore_attrs).length > 0){
 					keys.push('attributes');
 					dollars.push('$' + dollar_counter++);
 					values.push(con.toHstore(hstore_attrs));
@@ -84,13 +84,13 @@ _ = require('underscore');
 							keys.push(key + ' = $' + dollar_counter ++);
 							values.push(model.attributes[key]);
 						}
-					}else if (config.hstore){
+					}else if (con.config.hstore){
 						if(model.has_attributes()){
 							hstore_attrs[key] = model.attributes[key];
 						}
 					}else throw new Error("Column '" + key + "' not found in table '" + model.table_name() + "'")
 				}
-				if(config.hstore && _.keys(hstore_attrs).length > 0){
+				if(con.config.hstore && _.keys(hstore_attrs).length > 0){
 					keys.push('attributes = $' + dollar_counter++);
 					values.push(con.toHstore(hstore_attrs));
 				}
