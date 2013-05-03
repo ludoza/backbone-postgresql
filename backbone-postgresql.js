@@ -1,5 +1,19 @@
 Backbone = require('backbone'), _ = require('underscore');
-
+/**
+ * Backbone-postgresql extend the Backbone Model and Collection to easily
+ * read and write from tables and views
+ * 
+ * You must extend the model with the following properties for Backbone-postgresql
+ * to work:
+ * 
+ * urlRoot or tableName: urlRoot is included for legacy purposes, where tableName
+ * is the prefered method to specify your table or view name to user.
+ *
+ * idAttribute: Backbone-postgresql assumes the primary key for the table is 'id'.
+ * If this is not you need to specify the correct primary key for the table.
+ * 
+ * 
+ */
 (function () {
     var con;
 
@@ -11,6 +25,11 @@ Backbone = require('backbone'), _ = require('underscore');
             if (this.config.db === undefined) throw new Error("You must define the config");
             this.pg = this.pg || require('pg');
             this.pg.connect(this.config.db, cb);
+            if (con.config.debug === undefined) {
+            	con.config.debug = function(msg) {
+            		// silent;
+            	};
+            };
         },
 
         read: function (model, options) {
@@ -21,7 +40,12 @@ Backbone = require('backbone'), _ = require('underscore');
                     var attr_query = (model.has_attributes() ? ', %# attributes as attributes' : '');
                     options.relation_conds = model.relation_conds();
                     var filter = model.filter_query(options, ' AND ');
-                    client.query('SELECT *' + attr_query + ' FROM ' + model.table_name() + ' WHERE ' + model.idAttribute + ' = $1' + filter, [model.id], function (err, result) {
+                    var qry = 'SELECT *' + attr_query + ' FROM ' + model.table_name() + ' WHERE ' + model.idAttribute + ' = $1' + filter;
+                    con.config.debug('read query = ' + JSON.stringify( {
+						text: qry,
+						value: [model.id]
+					}));
+                    client.query(qry, [model.id],function (err, result) {
                         if (err) return options.error(model, err);
                         if (result.rows.length == 0) return options.error(model, new Error("Not found"));
                         options.success(model.merge_incoming_attributes(result.rows[0]));
@@ -63,7 +87,12 @@ Backbone = require('backbone'), _ = require('underscore');
                     if (_.keys(keys).length > 0) {
                         value_str = ' (' + keys.join(',') + ') VALUES (' + dollars.join(',') + ')'
                     }
-                    client.query('INSERT INTO ' + model.table_name() + value_str + ' RETURNING *' + attr_query, values, function (err, result) {
+                    var qry = 'INSERT INTO ' + model.table_name() + value_str + ' RETURNING *' + attr_query;
+                    con.config.debug('create query = ' + JSON.stringify( {
+						text: qry,
+						value: values
+					}));
+                    client.query(qry, values, function (err, result) {
                         if (err) return options.error(model, err);
                         options.success(model.merge_incoming_attributes(result.rows[0]));
                     });
@@ -99,7 +128,12 @@ Backbone = require('backbone'), _ = require('underscore');
                 }
                 values.push(model.id);
                 con.connect(function (err, client) {
-                    client.query('UPDATE ' + model.table_name() + ' SET ' + keys.join(', ') + ' WHERE ' + model.idAttribute + ' = $' + dollar_counter + ' RETURNING *' + attr_query, values, function (err, result) {
+                	var qry = 'UPDATE ' + model.table_name() + ' SET ' + keys.join(', ') + ' WHERE ' + model.idAttribute + ' = $' + dollar_counter + ' RETURNING *' + attr_query;
+                	con.config.debug('update query = ' + JSON.stringify( {
+						text: qry,
+						value: values
+					}));
+                    client.query(qry, values, function (err, result) {
                         if (err) return options.error(model, err);
                         if (result.rows.length == 0) return options.error(model, new Error("Not found"));
                         options.success(model.merge_incoming_attributes(result.rows[0]));
@@ -111,8 +145,13 @@ Backbone = require('backbone'), _ = require('underscore');
         delete: function (model, options) {
             con.connect(function (err, client) {
                 options.relation_conds = model.relation_conds()
-                var where_clause = model.filter_query(options, ' AND ')
-                client.query('DELETE FROM ' + model.table_name() + ' WHERE ' + model.idAttribute + ' = $1' + where_clause + ' RETURNING ' + model.idAttribute, [model.id], function (err, result) {
+                var where_clause = model.filter_query(options, ' AND ');
+                var qry = 'DELETE FROM ' + model.table_name() + ' WHERE ' + model.idAttribute + ' = $1' + where_clause + ' RETURNING ' + model.idAttribute;
+                con.config.debug('delete query = ' + JSON.stringify( {
+					text: qry,
+					value: [model.id]
+				}));                
+                client.query(qry, [model.id], function (err, result) {
                     if (err) return options.error(model, err);
                     if (result.rows.length == 0) return options.error(model, new Error("Not found"));
                     options.success();
@@ -123,10 +162,17 @@ Backbone = require('backbone'), _ = require('underscore');
         read_collection: function (collection, options) {
             con.connect(function (err, client) {
                 var model = new collection.model();
+                model.tableName = collection.tableName || model.tableName; 
+                model.idAttribute = collection.idAttribute || model.idAttribute; 
                 model.load_attributes(function () {
                     options.relation_conds = collection.relation_conds();
                     var where_clause = model.filter_query(options, ' WHERE ');
-                    client.query('SELECT * FROM ' + collection.table_name() + where_clause + ' ORDER BY ' + model.idAttribute, [], function (err, result) {
+                    var qry = 'SELECT * FROM ' + collection.table_name() + where_clause + ' ORDER BY ' + model.idAttribute;
+                    con.config.debug('read collection query = ' + JSON.stringify( {
+						text: qry,
+						value: []
+					}));
+                    client.query(qry, [], function (err, result) {
                         if (err) return options.error(collection, err);
                         options.success(result.rows);
                         collection.trigger('fetched');
@@ -170,21 +216,26 @@ Backbone = require('backbone'), _ = require('underscore');
         }
 
     }
-
+	
     Backbone.Model.column_defs = {};
-
+                               
     Backbone.Model.prototype.load_attributes = function (cb) {
         var self = this;
         if (!(this.table_name() in Backbone.Model.column_defs)) {
             con.connect(function (err, client) {
-                client.query("SELECT a.attname as name, format_type(a.atttypid, a.atttypmod) as type, d.adsrc as default, a.attnotnull as not_null \
-												FROM pg_attribute a\
-												LEFT JOIN pg_attrdef d\
-													ON	a.attrelid = d.adrelid\
-													AND a.attnum = d.adnum\
-												WHERE a.attrelid = '" + self.table_name() + "'::regclass AND a.attnum > 0\
-												AND NOT a.attisdropped\
-												ORDER BY a.attnum", [], function (err, result) {
+				var qry = "SELECT a.attname as name, format_type(a.atttypid, a.atttypmod) as type, d.adsrc as default, a.attnotnull as not_null \
+							FROM pg_attribute a\
+							LEFT JOIN pg_attrdef d\
+								ON	a.attrelid = d.adrelid\
+								AND a.attnum = d.adnum\
+							WHERE a.attrelid = '" + self.table_name() + "'::regclass AND a.attnum > 0\
+							AND NOT a.attisdropped\
+							ORDER BY a.attnum";
+				con.config.debug('load attributes query = ' + JSON.stringify( {
+					text: qry,
+					value: []
+				}));
+                client.query(qry, [], function (err, result) {
                     if (err) {
                         Backbone.Model.column_defs[self.table_name()] = [];
                     } else {
@@ -199,7 +250,6 @@ Backbone = require('backbone'), _ = require('underscore');
     }
 
     Backbone.Model.prototype.table_name = function () {
-
         var split_url = this.tableName || this.urlRoot;
         split_url = split_url.split('/');
         return split_url[split_url.length - 1];
@@ -273,6 +323,8 @@ Backbone = require('backbone'), _ = require('underscore');
     }
 
     Backbone.Collection.prototype.table_name = function () {
+    	if ( !this.tableName && this.model)
+			this.tableName = this.model.prototype.tableName;
         var split_url = this.tableName || this.urlRoot;
         split_url = _.reject(split_url.split('/'), function (elem) {
             return elem === ''
@@ -281,6 +333,8 @@ Backbone = require('backbone'), _ = require('underscore');
     }
 
     Backbone.Collection.prototype.relation_conds = function () {
+		if ( !this.tableName && this.model)
+			this.tableName = this.model.prototype.tableName;
         var split_url = this.tableName || this.urlRoot;
         var split_url = _.reject(split_url.split('/'), function (elem) {
             return elem === ''
