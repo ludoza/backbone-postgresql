@@ -22,9 +22,17 @@ Backbone = require('backbone'), _ = require('underscore');
         config: undefined,
 
         connect: function (cb) {
-            if (this.config.db === undefined) throw new Error("You must define the config");
-            this.pg = this.pg || require('pg');
-            this.pg.connect(this.config.db, cb);
+            if (this.config.db === undefined || this.config.db.client === undefined) 
+            if (this.config.db !== undefined) {
+                this.pg = this.pg || require('pg');
+                this.pg.connect(this.config.db, cb);                
+            } else 
+            if (this.config.client !== undefined) {
+                cb(undefined, this.config.client);                
+            } 
+            else throw new Error("You must define the config");
+
+            
             if (con.config.debug === undefined) {
             	con.config.debug = function(msg) {
             		// silent;
