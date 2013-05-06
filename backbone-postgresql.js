@@ -297,7 +297,8 @@ Backbone = require('backbone'), _ = require('underscore');
         Backbone.Model.column_defs[this.table_name()].map(function (col) {
             if (col.name === column_name) col_type = col.type
         });
-        if (col_type === 'text' || !! col_type.match(/character varying/)) return "'" + value + "'";
+        if (col_type !== null)
+            if (col_type === 'text' || !! col_type.match(/character varying/)) return "'" + value + "'";
         return value;
     }
 
@@ -327,7 +328,7 @@ Backbone = require('backbone'), _ = require('underscore');
     var old_fn = Backbone.Collection.prototype._onModelEvent;
     Backbone.Collection.prototype._onModelEvent = function (ev, model, collection, options) {
         if (ev == 'add') _.extend(model.attributes, collection.relation_conds());
-        old_fn(ev, model, collection, options);
+        old_fn.apply(this, arguments);
     }
 
     Backbone.Collection.prototype.table_name = function () {
