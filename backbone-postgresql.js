@@ -312,6 +312,7 @@ Backbone = require('backbone'), _ = require('underscore');
                 conds = options.filter;
             } else if (options.filter instanceof Object) {
                 conds = _.keys(options.filter).map(function (i) {
+                    if (options.filter[i] instanceof Object) return '';
                     return i + ' = ' + self.quote(i, options.filter[i])
                 });
             }
